@@ -1,97 +1,115 @@
+# Workplace Simulation
 
-# Quera Country Simulator — OOP Mini Project
+[![CI](https://github.com/arminkhalilzadeh/Quera-Workplace-Simulation/actions/workflows/ci.yml/badge.svg)](https://github.com/arminkhalilzadeh/Quera-Workplace-Simulation/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A compact economic–social simulator designed to showcase **Object-Oriented Programming** in Python.
-It implements a clean model of **people** (`Engineer`, `Teacher`, `Worker`) and **workplaces**
-(`Mine`, `School`, `Company`) built on top of the base classes `Person` and `WorkPlace`.
+A small economic simulation written in Python to practise **object-oriented design**. People with
+different jobs (`Worker`, `Engineer`, `Teacher`) are hired by workplaces (`Mine`, `Company`, `School`).
+Each agent has a daily balance that depends on age, experience level and the workplace it belongs to.
 
-> This repository is structured to be **portfolio-ready**: clear package layout, unit tests (pytest),
-and CI (GitHub Actions).
+Built as part of the *Advanced Python Programming and Object-Oriented Thinking* course at Quera College.
 
-## ✨ Highlights
-- **Clean OOP hierarchy**: `Person` and `WorkPlace` with job- and workplace-specific subclasses.
-- **Hiring & capacity rules** with bidirectional links (`person.work_place` ↔ `workplace.employees`).
-- **Daily net calculation**: income adjusted by levels (person/workplace), life cost, and workplace maintenance.
-- **Unit tests** with `pytest` and ready-to-use **CI** workflow.
-- **Readable code** with type hints and simple constants-based configuration (`Consts`).
+## Design
 
-## 📦 Project Structure
+```mermaid
+classDiagram
+    class Person {
+        <<abstract>>
+        +name, age, level, job
+        +work_place
+        +get_price()*
+        +calc_income()*
+        +calc_life_cost()*
+        +do_level(income)
+        +calc()
+        +upgrade()
+        +calc_all()$
+    }
+    class WorkPlace {
+        <<abstract>>
+        +name, level, capacity, expertise
+        +employees
+        +calc_capacity()*
+        +calc_costs()*
+        +hire(person)
+        +upgrade()
+        +calc()
+        +calc_all()$
+    }
+    Person <|-- Worker
+    Person <|-- Engineer
+    Person <|-- Teacher
+    WorkPlace <|-- Mine
+    WorkPlace <|-- Company
+    WorkPlace <|-- School
+    WorkPlace "1" o-- "*" Person : employees
 ```
-country/
-  models/
-    person.py
-    employees/
-      engineer.py
-      teacher.py
-      worker.py
-    workplaces/
-      work_place.py
-      mine.py
-      school.py
-      company.py
-tests/
-  test_hiring.py
-  test_income.py
-requirements.txt
-README.md
-```
 
-## 🚀 Quickstart
+- **Abstract base classes** (`abc.ABC`) define the interface. Each subclass supplies its own economic rules.
+- **Class-level registries** (`Person.instances`, `WorkPlace.instances`) let `calc_all()` add up the whole economy.
+- **Two-way link** on hiring: `workplace.employees` ↔ `person.work_place`, with a capacity check that
+  raises `WorkPlaceIsFull`.
+
+## Model rules
+
+**People:** a person's daily net balance is their income, scaled by their own level and their workplace's level, minus their cost of living:
+
+$$\text{net} = \text{income}\cdot\sqrt{\text{level}_{person}\cdot\text{level}_{workplace}} - \text{life cost}$$
+
+A person without a job only pays the cost of living.
+
+| Job | Training price | Life cost | Income |
+|---|---|---|---|
+| Worker | falls with age (∝ 1/age) | rises with age (∝ age) | falls with age (∝ 1/age) |
+| Engineer | ∝ √(15/age) | ∝ √(age/15) | ∝ √(15/age) |
+| Teacher | falls linearly with age | rises linearly with age | falls linearly with age |
+
+**Workplaces:** a workplace's daily balance is its maintenance cost, as a negative number.
+
+| Workplace | Capacity at level *L* | Daily cost |
+|---|---|---|
+| Mine | *L*² | 2500 + 50·*L* |
+| Company | *L* | 2500·*L* |
+| School | ⌊√*L*⌋ | 2500·⌊√*L*⌋ |
+
+All constants are kept in `Consts` classes, so they are easy to change.
+
+## Quickstart
+
 ```bash
-python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS/Linux
-# source .venv/bin/activate
+git clone https://github.com/arminkhalilzadeh/Quera-Workplace-Simulation.git
+cd Quera-Workplace-Simulation
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
 
-pip install -r requirements.txt
-pytest -q
+pytest              # run the test suite
+python examples/demo.py
 ```
 
-## 🧪 What the tests cover
-- **Hiring & capacity**: attempts to hire beyond capacity raise `WorkPlaceIsFull`.
-- **Income & net**: income is job+workplace-dependent; net = adjusted income − life cost.
-- **Workplace economics**: daily maintenance costs contribute negative net for workplaces.
-
-## 🧩 Core Design
-- **Income adjustment** (in `Person.do_level`):  
-  `adjusted_income = base_income * sqrt(person.level * workplace.level)`
-- **Workplace capacity & costs**:  
-  - `Mine`: `capacity = level^2`, `costs = BASE_PLACE_COST + LEVEL_MUL * level`  
-  - `School`: `capacity = floor(sqrt(level))`, `costs = BASE_PLACE_COST * floor(sqrt(level))`  
-  - `Company`: `capacity = level`, `costs = BASE_PLACE_COST * level`
-
-All economic constants live in `Consts` for clarity and easy tweaking.
-
-## 🧭 Example
 ```python
-from country.models.workplaces.mine import Mine
-from country.models.employees.engineer import Engineer
+from workplace_sim import Mine, Worker, WorkPlaceIsFull
 
-m = Mine("M1")              # capacity computed for level=1
-e = Engineer("Ali", 25)
-m.hire(e)
+mine = Mine("Kerman Mine")       # level 1 -> capacity 1
+mine.hire(Worker("Amir", 18))
+mine.upgrade()                   # level 2 -> capacity 4
 
-print("Base income:", e.calc_income())
-print("Net (daily):", e.calc())     # adjusted by levels minus life cost
-print("Workplace net:", m.calc())   # negative maintenance cost
+print(mine.employees[0].calc())  # daily net balance of the worker
+print(mine.calc())               # -(daily maintenance cost)
 ```
 
-## 🔧 Tooling
-- **Python**: 3.10+
-- **Tests**: `pytest`
-- **CI**: GitHub Actions workflow in `.github/workflows/ci.yml`
-- **Code style**: Type hints, straightforward modules (you can add ruff/black later if desired)
+## Project structure
 
-## 🗺️ Roadmap
-- CLI/Streamlit mini-dashboard for running scenarios
-- Hiring policies (FCFS / merit-based / lottery)
-- Random shocks (strikes, breakdowns) and basic tax/inflation knobs
-- Docs: `docs/model.md`, UML diagram, charts for simulation runs
+```
+├── src/workplace_sim/
+│   ├── people/          # Person (abstract), Worker, Engineer, Teacher
+│   └── workplaces/      # WorkPlace (abstract), Mine, Company, School, WorkPlaceIsFull
+├── tests/               # pytest suite (constructors, economics, hiring, aggregation)
+├── examples/demo.py
+├── pyproject.toml       # packaging, pytest and ruff configuration
+└── .github/workflows/   # CI: lint and tests on Python 3.10–3.13
+```
 
-## 📄 License
-MIT — see [LICENSE](./LICENSE).
+## License
 
----
-
-If you find this useful, feel free to star the repo ⭐ and open issues for ideas or improvements!
+[MIT](LICENSE) © Armin Khalilzadeh
